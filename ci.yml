@@ -1,0 +1,32 @@
+name: mini-mlflow-flask-ci
+
+on:
+  push:
+    paths: ["mini-mlflow-flask-ci/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["mini-mlflow-flask-ci/**", ".github/workflows/ci.yml"]
+
+jobs:
+  test-and-train:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mini-mlflow-flask-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests (includes a model-quality gate)
+        run: pytest -q
+      - name: Train and register the model
+        run: python train.py
+      - name: Upload MLflow tracking data
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-tracking
+          path: |
+            mini-mlflow-flask-ci/mlflow.db
+            mini-mlflow-flask-ci/mlruns/
