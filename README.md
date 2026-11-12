@@ -20,11 +20,13 @@ mini-mlflow-flask-ci/
 ├─ train.py
 ├─ model_utils.py
 ├─ app.py
-├─ tests/
-│  └─ test_model.py
-└─ .github/
-   └─ workflows/
-      └─ ci.yml
+├─ pytest.ini
+├─ Dockerfile
+└─ tests/
+   ├─ test_model.py
+   └─ test_api.py
+
+.github/workflows/ci.yml   (at the repository root, where GitHub Actions looks for it)
 ```
 
 ---
@@ -34,6 +36,7 @@ mini-mlflow-flask-ci/
 ### **Create virtual environment**
 
 ```bash
+cd mini-mlflow-flask-ci
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
@@ -55,18 +58,21 @@ pip install -r requirements.txt
 python train.py
 ```
 
-This creates a local MLflow tracking folder:
+This creates a local MLflow tracking database and artifact folder, and registers a new version of `salary_model`:
 
 ```
+mlflow.db
 mlruns/
 ```
+
+Recent MLflow releases refuse the old file-only `./mlruns` tracking store, so this project tracks runs in SQLite. Both files are git-ignored: never commit them.
 
 ---
 
 ## 📊 **3. View MLflow UI**
 
 ```bash
-mlflow ui --backend-store-uri ./mlruns --port 5000
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 ```
 
 Open: **[http://127.0.0.1:5000](http://127.0.0.1:5000)**
@@ -75,8 +81,8 @@ You will see:
 
 * metrics
 * parameters
-* saved model artifact (`salary_model`)
-* different model versions (each run)
+* the logged model (`salary_model`)
+* registered model versions (one per training run) under **Models**
 
 ---
 
@@ -85,6 +91,8 @@ You will see:
 ```bash
 python app.py
 ```
+
+`python app.py` is the development server (works on Windows, Mac and Linux). On Mac or Linux you can also run the production server: `gunicorn --bind 0.0.0.0:8000 app:app`.
 
 ### **Test API (single prediction)**
 
@@ -110,6 +118,8 @@ curl -X POST -H "Content-Type: application/json" \
 pytest -q
 ```
 
+The tests train the model, check a simple quality gate (salary must rise with experience), and call the API with good and bad payloads.
+
 ---
 
 ## 🤖 **6. GitHub Actions CI/CD**
@@ -117,15 +127,11 @@ pytest -q
 The workflow automatically:
 
 * installs dependencies
-* runs unit tests
-* trains the model
-* uploads **mlruns** as an artifact
+* runs the tests (including the quality gate)
+* trains and registers the model
+* uploads `mlflow.db` and `mlruns/` as a build artifact
 
-### To activate CI:
-
-Push the repo to GitHub.
-
-Workflow file:
+It runs on every push or pull request that touches `mini-mlflow-flask-ci/`. The workflow file lives at the repository root:
 
 ```
 .github/workflows/ci.yml
@@ -135,11 +141,13 @@ Workflow file:
 
 ## 🐳 **7. (Optional) Docker Deployment**
 
-### Build the image:
+### Build the image (from inside `mini-mlflow-flask-ci/`):
 
 ```bash
 docker build -t mini-ml-api .
 ```
+
+The build installs the requirements, trains the model inside the image, and serves it with gunicorn.
 
 ### Run the container:
 
